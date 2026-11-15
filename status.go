@@ -11,6 +11,10 @@ import (
 const (
 	// timeFormatLong is the package time format of long timestamps from a NIS.
 	timeFormatLong = "2006-01-02 15:04:05 -0700"
+
+	// timeFormatShort is the package time format of bare date values (no time
+	// or offset) from a NIS, such as MANDATE.
+	timeFormatShort = "2006-01-02"
 )
 
 var (
@@ -113,10 +117,16 @@ type Status struct {
 	// The time and date that the STATUS record was written.
 	EndAPC time.Time
 	// The ambient temperature as measured by the UPS.
-	InternalTemp  float64
-	OutputVoltage float64
-	LineFrequency float64
-	OutputAmps    float64
+	InternalTemp         float64
+	OutputVoltage        float64
+	LineFrequency        float64
+	OutputAmps           float64
+	DelayShutdown        time.Duration
+	DelayWake            time.Duration
+	LoadApparent         float64
+	ManufactureDate      time.Time
+	NominalApparent      float64
+	NominalOutputVoltage float64
 }
 
 // parseKV parses an input key/value string in "key : value" format, and sets
@@ -179,7 +189,9 @@ const (
 	keyCable         key = "CABLE"
 	keyCumOnBatt     key = "CUMONBATT"
 	keyDate          key = "DATE"
+	keyDelayShutdown key = "DSHUTD"
 	keyDriver        key = "DRIVER"
+	keyDelayWake     key = "DWAKE"
 	keyEndAPC        key = "END APC"
 	keyFirmware      key = "FIRMWARE"
 	keyHiTrans       key = "HITRANS"
@@ -189,14 +201,18 @@ const (
 	keyLastXfer      key = "LASTXFER"
 	keyLineFrequency key = "LINEFREQ"
 	keyLineV         key = "LINEV"
+	keyLoadApparent  key = "LOADAPNT"
 	keyLoadPct       key = "LOADPCT"
 	keyLoTrans       key = "LOTRANS"
+	keyManDate       key = "MANDATE"
 	keyMaxTime       key = "MAXTIME"
 	keyMBattChg      key = "MBATTCHG"
 	keyMinTimeL      key = "MINTIMEL"
 	keyModel         key = "MODEL"
+	keyNomApparent   key = "NOMAPNT"
 	keyNomBattV      key = "NOMBATTV"
 	keyNomInV        key = "NOMINV"
+	keyNomOutV       key = "NOMOUTV"
 	keyNomPower      key = "NOMPOWER"
 	keyNumXfers      key = "NUMXFERS"
 	keyOutV          key = "OUTPUTV"
@@ -295,6 +311,12 @@ func (s *Status) parseKVFloat(k key, v string) (bool, error) {
 		s.LineFrequency, err = parse()
 	case keyOutputAmps:
 		s.OutputAmps, err = parse()
+	case keyLoadApparent:
+		s.LoadApparent, err = parse()
+	case keyNomApparent:
+		s.NominalApparent, err = parse()
+	case keyNomOutV:
+		s.NominalOutputVoltage, err = parse()
 	default:
 		return false, nil
 	}
@@ -319,6 +341,8 @@ func (s *Status) parseKVTime(k key, v string) (bool, error) {
 		s.LastSelftest, err = parseOptionalTime(v)
 	case keyEndAPC:
 		s.EndAPC, err = parseOptionalTime(v)
+	case keyManDate:
+		s.ManufactureDate, err = parseOptionalTime(v)
 	default:
 		return false, nil
 	}
@@ -350,6 +374,10 @@ func (s *Status) parseKVDuration(k key, v string) (bool, error) {
 		s.TimeOnBattery, err = parse()
 	case keyCumOnBatt:
 		s.CumulativeTimeOnBattery, err = parse()
+	case keyDelayShutdown:
+		s.DelayShutdown, err = parse()
+	case keyDelayWake:
+		s.DelayWake, err = parse()
 	default:
 		return false, nil
 	}
@@ -384,6 +412,10 @@ func parseOptionalTime(value string) (time.Time, error) {
 	}
 
 	if time, err := time.Parse(timeFormatLong, value); err == nil {
+		return time, nil
+	}
+
+	if time, err := time.Parse(timeFormatShort, value); err == nil {
 		return time, nil
 	}
 
